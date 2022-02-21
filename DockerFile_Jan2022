@@ -1,0 +1,186 @@
+#
+# ORACLE DOCKERFILES PROJECT
+# --------------------------
+# This is the Dockerfile for Oracle SOA Suite Quick Start
+#
+# REQUIRED FILES TO BUILD THIS IMAGE
+# ----------------------------------
+# See soasuite.download file in the install directory
+# Also see soapatches.download file in the patches directory
+#
+#docker build -t soaquickstart:12.2.1.4 . > build.log
+#
+# Pull base image
+# ---------------
+FROM oracle/serverjre:8 as builder
+
+
+# Maintainer
+# ----------
+MAINTAINER Jorge Ceballos
+
+
+# Common environment variables required for this build
+# ----------------------------------------------------
+ENV ORACLE_HOME=/u01/oracle \
+    USER_MEM_ARGS="-Djava.security.egd=file:/dev/./urandom" \
+    PATH=$PATH:${JAVA_HOME}/bin:/u01/oracle/oracle_common/common/bin:/u01/oracle/wlserver/common/bin \
+	OPATCH_PATCH_DIR="${OPATCH_PATCH_DIR:-/u01/opatch_patch}"
+
+# Setup subdirectory for FMW install package and container-dummy.sh
+# -----------------------------------------------------------------
+RUN mkdir -p /u01 ${OPATCH_PATCH_DIR} && \
+    chmod a+xr /u01 && \
+    useradd -b /u01 -d /u01/oracle -m -s /bin/bash oracle
+
+
+#
+# Environment variables required for this build (do NOT change)
+# -------------------------------------------------------------
+USER root
+ENV FMW_JAR1=fmw_12.2.1.4.0_soa_quickstart.jar \
+    FMW_JAR2=fmw_12.2.1.4.0_soa_quickstart2.jar
+
+#
+# Copy installers and patches for install
+# -------------------------------------------
+ADD install/* /u01/
+RUN mkdir /u01/patches && \
+    chown oracle:oracle -R /u01
+COPY patches/* /u01/patches/
+COPY opatch_patch/* ${OPATCH_PATCH_DIR}/ 
+COPY container-scripts/* /u01/oracle/container-scripts/
+RUN  cd /u01 && chmod 755 *.jar && \
+     chmod +xr /u01/oracle/container-scripts/*.*
+
+
+#
+# install
+# -----------------------------------
+USER oracle
+RUN cd /u01 && \
+  $JAVA_HOME/bin/java -jar $FMW_JAR1 -silent -responseFile /u01/soasuite.response -invPtrLoc /u01/oraInst.loc -jreLoc $JAVA_HOME -ignoreSysPrereqs -force -novalidation ORACLE_HOME=$ORACLE_HOME
+
+#
+# Apply OPatch patch
+# ------------------
+#
+RUN opatchzip=`ls ${OPATCH_PATCH_DIR}/*p*.zip 2>/dev/null`; \
+    if [ ! -z "$opatchzip" ]; then \
+      cd ${OPATCH_PATCH_DIR};  \
+      echo -e "\nApplying the below OPatch patch present in ${OPATCH_PATCH_DIR} directory."; \
+      ls *p*.zip; \
+      echo -e ""; \
+      echo "Extracting patch: ${opatchzip}"; \
+      $JAVA_HOME/bin/jar xf ${opatchzip} ; \
+      $JAVA_HOME/bin/java -jar ${OPATCH_PATCH_DIR}/6880880/opatch_generic.jar -silent oracle_home=$ORACLE_HOME; \
+      if [ $? -ne 0 ]; then \
+        echo "Applying patch to opatch Failed" ; \
+        exit 1 ; \
+      fi; \
+      rm -rf ${OPATCH_PATCH_DIR}; \
+      echo "OPatch patch applied successfully."; \
+    fi
+	
+	
+#
+# Apply SOA Patches Doc.Id 2746812.1
+# -----------------
+RUN patchzips=`ls /u01/patches/*p*.zip 2>/dev/null`; \
+    if [ ! -z "$patchzips" ]; then \
+	  export OPATCH_NO_FUSER=TRUE; \
+      cd /u01/patches;  \
+      echo -e "\nBelow patches present in patches directory. Applying these patches:"; \
+      ls *p*.zip; \
+      echo -e ""; \
+	  echo -e "\nUnzip patches"; \
+	  $JAVA_HOME/bin/jar xf 3.p33727616_122140_Generic.zip; \
+	  $JAVA_HOME/bin/jar xf 4.p33093748_122140_Generic.zip; \
+	  $JAVA_HOME/bin/jar xf 5.p33735326_12214220105_Generic.zip; \
+	  $JAVA_HOME/bin/jar xf 6.p33678607_122140_Generic.zip; \
+	  $JAVA_HOME/bin/jar xf 7.p33539252_122140_Generic.zip; \
+    $JAVA_HOME/bin/jar xf 8.p32720458_122140_Generic.zip; \
+    $JAVA_HOME/bin/jar xf 9.p31544353_122140_Linux-x86-64.zip; \
+    $JAVA_HOME/bin/jar xf 10.p32784652_122140_Generic.zip; \
+    $JAVA_HOME/bin/jar xf 11.p33697227_122140_Generic.zip; \
+    $JAVA_HOME/bin/jar xf 12.p33723124_122140_Generic.zip; \
+    $JAVA_HOME/bin/jar xf 13.p33696548_122140_Generic.zip; \
+    $JAVA_HOME/bin/jar xf 14.p32121987_122140_Generic.zip; \
+    $JAVA_HOME/bin/jar xf 15.p33591019_122140_Generic.zip; \
+	  rm -f /u01/patches/*p*.zip; \
+	  echo -e "\nApply patches"; \
+	  cd /u01/patches/33727616; \
+	  $ORACLE_HOME/OPatch/opatch apply -silent -oh $ORACLE_HOME -jre $JAVA_HOME -invPtrLoc /u01/oraInst.loc; \
+	  cd /u01/patches/33093748; \
+	  $ORACLE_HOME/OPatch/opatch apply -silent -oh $ORACLE_HOME -jre $JAVA_HOME -invPtrLoc /u01/oraInst.loc; \
+	  cd /u01/patches/33735326; \
+	  $ORACLE_HOME/OPatch/opatch apply -silent -oh $ORACLE_HOME -jre $JAVA_HOME -invPtrLoc /u01/oraInst.loc; \
+	  cd /u01/patches/33678607; \
+	  $ORACLE_HOME/OPatch/opatch apply -silent -oh $ORACLE_HOME -jre $JAVA_HOME -invPtrLoc /u01/oraInst.loc; \
+	  cd /u01/patches/33539252; \
+	  $ORACLE_HOME/OPatch/opatch apply -silent -oh $ORACLE_HOME -jre $JAVA_HOME -invPtrLoc /u01/oraInst.loc; \
+    cd /u01/patches/32720458; \
+	  $ORACLE_HOME/OPatch/opatch apply -silent -oh $ORACLE_HOME -jre $JAVA_HOME -invPtrLoc /u01/oraInst.loc; \
+    cd /u01/patches/31544353; \
+	  $ORACLE_HOME/OPatch/opatch apply -silent -oh $ORACLE_HOME -jre $JAVA_HOME -invPtrLoc /u01/oraInst.loc; \
+    cd /u01/patches/32784652; \
+	  $ORACLE_HOME/OPatch/opatch apply -silent -oh $ORACLE_HOME -jre $JAVA_HOME -invPtrLoc /u01/oraInst.loc; \
+    cd /u01/patches/33697227; \
+	  $ORACLE_HOME/OPatch/opatch apply -silent -oh $ORACLE_HOME -jre $JAVA_HOME -invPtrLoc /u01/oraInst.loc; \
+    cd /u01/patches/33723124; \
+	  $ORACLE_HOME/OPatch/opatch apply -silent -oh $ORACLE_HOME -jre $JAVA_HOME -invPtrLoc /u01/oraInst.loc; \
+    cd /u01/patches/33696548; \
+	  $ORACLE_HOME/OPatch/opatch apply -silent -oh $ORACLE_HOME -jre $JAVA_HOME -invPtrLoc /u01/oraInst.loc; \
+    cd /u01/patches/32121987; \
+	  $ORACLE_HOME/OPatch/opatch apply -silent -oh $ORACLE_HOME -jre $JAVA_HOME -invPtrLoc /u01/oraInst.loc; \
+    cd /u01/patches/1221412; \
+	  $ORACLE_HOME/OPatch/opatch apply -silent -oh $ORACLE_HOME -jre $JAVA_HOME -invPtrLoc /u01/oraInst.loc; \
+      $ORACLE_HOME/OPatch/opatch util cleanup -silent; \
+      rm -rf /u01/patches /u01/oracle/cfgtoollogs/opatch/*; \
+      echo -e "\nPatches applied in SOA oracle home are:"; \
+      cd $ORACLE_HOME/OPatch; \
+      $ORACLE_HOME/OPatch/opatch lspatches; \
+    else \
+      echo -e "\nNo patches present in patches directory. Skipping patch application."; \
+    fi
+
+#
+# Rebuild from base image
+# -----------------------
+FROM oracle/serverjre:8
+
+#
+# Maintainer
+# ----------
+LABEL maintainer="Jorge Ceballos"
+
+# Common environment variables required for this build
+# ----------------------------------------------------
+ENV ORACLE_HOME=/u01/oracle \
+    USER_MEM_ARGS="-Djava.security.egd=file:/dev/./urandom" \
+    PATH=$PATH:${JAVA_HOME}/bin:/u01/oracle/oracle_common/common/bin:/u01/oracle/wlserver/common/bin\
+    PATH=$PATH:/u01/oracle/oracle_common/modules/org.apache.maven_3.2.5/bin
+
+# Setup subdirectory for FMW install package and container-dummy.sh
+# -----------------------------------------------------------------
+RUN mkdir -p /u01 && \
+    chmod a+xr /u01 && \
+    useradd -b /u01 -d /u01/oracle -m -s /bin/bash oracle
+
+COPY --from=builder --chown=oracle:oracle /u01/oracle /u01/oracle
+
+#
+# Install the required packages
+# -----------------------------
+USER root
+RUN yum install -y hostname ant xorg-x11-apps vim nano && \
+    rm -rf /var/cache/yum
+
+
+#
+# Define default command to start bash.
+# 
+USER oracle
+WORKDIR $ORACLE_HOME
+HEALTHCHECK --start-period=5m --interval=1m CMD curl -k -s --fail `$HEALTH_SCRIPT_FILE` || exit 1
+
